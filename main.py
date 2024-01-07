@@ -8,6 +8,8 @@ from google.cloud import dns
 from google.oauth2 import service_account
 from ipaddress import ip_address, IPv4Address, IPv6Address
 
+from flask import Request
+
 import config
 
 # app = flask.Flask(__name__)
@@ -43,29 +45,37 @@ def page_unauthorized(e):
     return "<h1>401</h1><p>You are not authorized to access this resource.</p>", 401
 
 
-def main(request):
+def main(request: Request):
     a_record_found = False
     aaaa_record_found = False
     a_record_changed = False
     aaaa_record_changed = False
     ret_val = ""
-    
+
     logging.info("Update request started.")
 
     request_args = request.get_json(silent=True)
-    
+
     # Assign our parameters
-    if request_args:
-        host = request_args['host']
+    if request_args is None:
+        return 'Missing request args', 500
+
+    if 'host' not in request_args:
+        return 'Missing host param', 500
+    host = request_args['host']
+
+    if 'key' not in request_args:
+        return 'Missing key', 500
+    key = request_args['key']
+
+    ipv4 = None
+    if 'ipv4' in request_args:
         ipv4 = request_args['ipv4']
-        ipv6 = request_args['ipv6']
-        key = request_args['key']
+        if not is_valid_ipv4(ipv4):
+            return 'Invalid IPv4 address: {}'.format(ipv4), 500
 
-    if ipv4 and not (validIPv4Address(ipv4)):
-        logging.info("Given IPv4 {} is not valid".format(ipv4))
-        ipv4 = ""
-
-    if ipv6 and not (validIPv6Address(ipv6)):
+    ipv6 = None
+    if ipv6 and not (is_valid_ipv6_address(ipv6)):
         logging.info("Given IPv6 {} is not valid".format(ipv6))
         ipv6 = ""
 
@@ -79,7 +89,6 @@ def main(request):
 
     # Get a list of the current records
     records = get_records()
-	
 
     # Check for matching records
     for record in records:
@@ -122,13 +131,14 @@ def check_key(key):
         return False
 
 
-def validIPv4Address(ip):
+def is_valid_ipv4(ip):
     try:
         return True if type(ip_address(ip)) is IPv4Address else False
     except ValueError:
         return False
 
-def validIPv6Address(ip):
+
+def is_valid_ipv6_address(ip):
     try:
         return True if type(ip_address(ip)) is IPv6Address else False
     except ValueError:
